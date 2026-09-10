@@ -1,0 +1,18 @@
+# Local RabbitMQ broker for the tour-booking exercise.
+#
+#   docker compose up -d
+#
+#   AMQP        localhost:5672
+#   Management  http://localhost:15672   (guest / guest)
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: tours-rabbitmq
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

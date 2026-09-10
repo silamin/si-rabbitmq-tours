@@ -1,0 +1,41 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{9A32E008-A6CF-4DED-BD97-E61550FC82C3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TourBooking.Web", "src\TourBooking.Web\TourBooking.Web.csproj", "{E437AFC4-EC8C-40E8-B5FC-4F44B3834849}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EmailService", "src\EmailService\EmailService.csproj", "{3F507CA3-EC1B-49D9-815B-682F8022E231}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BackOffice", "src\BackOffice\BackOffice.csproj", "{2099B1A5-E736-4399-A73E-5CEB91ABBCA3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E437AFC4-EC8C-40E8-B5FC-4F44B3834849}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E437AFC4-EC8C-40E8-B5FC-4F44B3834849}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E437AFC4-EC8C-40E8-B5FC-4F44B3834849}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E437AFC4-EC8C-40E8-B5FC-4F44B3834849}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3F507CA3-EC1B-49D9-815B-682F8022E231}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3F507CA3-EC1B-49D9-815B-682F8022E231}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3F507CA3-EC1B-49D9-815B-682F8022E231}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3F507CA3-EC1B-49D9-815B-682F8022E231}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2099B1A5-E736-4399-A73E-5CEB91ABBCA3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2099B1A5-E736-4399-A73E-5CEB91ABBCA3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2099B1A5-E736-4399-A73E-5CEB91ABBCA3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2099B1A5-E736-4399-A73E-5CEB91ABBCA3}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{E437AFC4-EC8C-40E8-B5FC-4F44B3834849} = {9A32E008-A6CF-4DED-BD97-E61550FC82C3}
+		{3F507CA3-EC1B-49D9-815B-682F8022E231} = {9A32E008-A6CF-4DED-BD97-E61550FC82C3}
+		{2099B1A5-E736-4399-A73E-5CEB91ABBCA3} = {9A32E008-A6CF-4DED-BD97-E61550FC82C3}
+	EndGlobalSection
+EndGlobal

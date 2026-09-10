@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tour Booking</title>
+<style>
+  :root {
+    --ink: #1c1c1e; --muted: #6b7280; --line: #d8d8dc;
+    --accent: #7c3aed; --ok: #047857; --bad: #b91c1c; --bg: #f6f6f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 16px;
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink); background: var(--bg);
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+  .card {
+    background: #fff; border: 1px solid var(--line); border-radius: 10px;
+    padding: 24px; margin-bottom: 20px;
+  }
+  label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+  input[type=text], input[type=email], select {
+    width: 100%; padding: 9px 11px; font: inherit; color: inherit;
+    border: 1px solid var(--line); border-radius: 6px; background: #fff;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+  .field { margin-bottom: 18px; }
+  fieldset { border: 0; padding: 0; margin: 0 0 22px; }
+  legend { font-weight: 600; font-size: 13px; margin-bottom: 8px; padding: 0; }
+  .radios { display: flex; gap: 24px; }
+  .radios label { font-weight: 400; font-size: 15px; display: flex; align-items: center; gap: 7px; margin: 0; cursor: pointer; }
+  button {
+    font: inherit; font-weight: 600; padding: 10px 22px; border: 0; border-radius: 6px;
+    background: var(--accent); color: #fff; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:disabled { opacity: .5; cursor: default; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+  #log { list-style: none; margin: 0; padding: 0; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
+  #log li { padding: 8px 0; border-bottom: 1px solid #eee; }
+  #log li:last-child { border-bottom: 0; }
+  .key { font-weight: 700; color: var(--accent); }
+  .err { color: var(--bad); }
+  .empty { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Tour Booking</h1>
+  <p class="sub">Publishes to the <strong>tours.topic</strong> exchange. Book &rarr; <code>tour.booked</code> &nbsp;&middot;&nbsp; Cancel &rarr; <code>tour.cancelled</code></p>
+
+  <form class="card" id="form">
+    <div class="field">
+      <label for="name">Name</label>
+      <input type="text" id="name" name="name" required>
+    </div>
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required>
+    </div>
+
+    <div class="field">
+      <label for="tour">Tours</label>
+      <select id="tour" name="tour" required>
+        <option value="">Choose one</option>
+        <option>Copenhagen City Walk</option>
+        <option>Odense H.C. Andersen Tour</option>
+        <option>Mons Klint Day Trip</option>
+        <option>Aarhus Old Town</option>
+        <option>Skagen Lighthouse Trip</option>
+      </select>
+    </div>
+
+    <fieldset>
+      <legend>Action</legend>
+      <div class="radios">
+        <label><input type="radio" name="action" value="book" checked> Book</label>
+        <label><input type="radio" name="action" value="cancel"> Cancel</label>
+      </div>
+    </fieldset>
+
+    <button type="submit" id="submit">Submit</button>
+  </form>
+
+  <div class="card">
+    <h2>Published messages</h2>
+    <ul id="log"><li class="empty">Nothing sent yet. Watch the two consumer consoles as you submit.</li></ul>
+  </div>
+
+</div>
+
+<script>
+  const form   = document.getElementById('form');
+  const log    = document.getElementById('log');
+  const button = document.getElementById('submit');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    button.disabled = true;
+
+    const payload = {
+      name:   document.getElementById('name').value.trim(),
+      email:  document.getElementById('email').value.trim(),
+      tour:   document.getElementById('tour').value,
+      action: form.querySelector('input[name=action]:checked').value
+    };
+
+    try {
+      const res  = await fetch('/book', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        addLine(`<span class="key">${data.routingKey}</span> &rarr; ${escapeHtml(payload.tour)} (${escapeHtml(payload.name)})`);
+      } else {
+        addLine(`<span class="err">error: ${escapeHtml(data.error || res.statusText)}</span>`);
+      }
+    } catch (err) {
+      addLine(`<span class="err">network error: ${escapeHtml(String(err))}</span>`);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  function addLine(html) {
+    const empty = log.querySelector('.empty');
+    if (empty) empty.remove();
+    const li = document.createElement('li');
+    li.innerHTML = new Date().toLocaleTimeString() + '  ' + html;
+    log.prepend(li);
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+</script>
+</body>
+</html>
