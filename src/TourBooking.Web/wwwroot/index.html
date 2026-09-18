@@ -52,22 +52,22 @@
 <div class="wrap">
 
   <h1>Tour Booking</h1>
-  <p class="sub">Publishes to the <strong>tours.topic</strong> exchange. Book &rarr; <code>tour.booked</code> &nbsp;&middot;&nbsp; Cancel &rarr; <code>tour.cancelled</code></p>
+  <p class="sub">Publishes to the <strong>tours.topic</strong> exchange. Book &rarr; <code>tour.booked</code> &nbsp;&middot;&nbsp; Cancel &rarr; <code>tour.cancelled</code><br>Persistent messages, publisher confirms, dead-letter and alternate exchange.</p>
 
   <form class="card" id="form">
     <div class="field">
       <label for="name">Name</label>
-      <input type="text" id="name" name="name" required>
+      <input type="text" id="name" name="name">
     </div>
 
     <div class="field">
       <label for="email">Email</label>
-      <input type="email" id="email" name="email" required>
+      <input type="email" id="email" name="email">
     </div>
 
     <div class="field">
       <label for="tour">Tours</label>
-      <select id="tour" name="tour" required>
+      <select id="tour" name="tour">
         <option value="">Choose one</option>
         <option>Copenhagen City Walk</option>
         <option>Odense H.C. Andersen Tour</option>
@@ -83,6 +83,15 @@
         <label><input type="radio" name="action" value="book" checked> Book</label>
         <label><input type="radio" name="action" value="cancel"> Cancel</label>
       </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Failure tests &mdash; day 5</legend>
+      <div class="radios">
+        <label><input type="radio" name="action" value="invalid"> Send an <strong>invalid</strong> payload</label>
+        <label><input type="radio" name="action" value="unroutable"> Send an <strong>unroutable</strong> key</label>
+      </div>
+      <p class="sub" style="margin:8px 0 0">Both are captured and shown in the <strong>AdminApp</strong> console &mdash; neither is dropped.</p>
     </fieldset>
 
     <button type="submit" id="submit">Submit</button>
@@ -104,11 +113,13 @@
     e.preventDefault();
     button.disabled = true;
 
+    const action = form.querySelector('input[name=action]:checked').value;
+
     const payload = {
       name:   document.getElementById('name').value.trim(),
       email:  document.getElementById('email').value.trim(),
       tour:   document.getElementById('tour').value,
-      action: form.querySelector('input[name=action]:checked').value
+      action: action
     };
 
     try {
@@ -120,7 +131,10 @@
       const data = await res.json();
 
       if (res.ok) {
-        addLine(`<span class="key">${data.routingKey}</span> &rarr; ${escapeHtml(payload.tour)} (${escapeHtml(payload.name)})`);
+        const what = (action === 'invalid' || action === 'unroutable')
+          ? escapeHtml(data.message)
+          : `${escapeHtml(payload.tour)} (${escapeHtml(payload.name)})`;
+        addLine(`<span class="key">${data.routingKey}</span> &rarr; ${what}`);
       } else {
         addLine(`<span class="err">error: ${escapeHtml(data.error || res.statusText)}</span>`);
       }

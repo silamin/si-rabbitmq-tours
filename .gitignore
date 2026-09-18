@@ -24,3 +24,6 @@ secrets.json
 # OS
 .DS_Store
 Thumbs.db
+
+# local run captures
+run-*.log

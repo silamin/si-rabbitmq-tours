@@ -4,10 +4,14 @@ using RabbitMQ.Client;
 // ---------------------------------------------------------------------------
 //  Tour Booking – web front end
 //
-//  One form. Two possible routing keys. One topic exchange.
+//  One form. Several possible routing keys. One topic exchange.
 //
-//      Book   -> routing key "tour.booked"
-//      Cancel -> routing key "tour.cancelled"
+//      Book       -> routing key "tour.booked"
+//      Cancel     -> routing key "tour.cancelled"
+//      Invalid    -> routing key "tour.booked", but a payload no consumer can
+//                    process. Demonstrates the DEAD-LETTER path.
+//      Unroutable -> routing key "noroute.test", which matches no binding.
+//                    Demonstrates the ALTERNATE-EXCHANGE path.
 //
 //  The web app does not know, and must not know, who is listening. It publishes
 //  to the exchange and the *bindings* decide who gets a copy. That is the whole
@@ -24,6 +28,35 @@ app.UseStaticFiles();
 
 app.MapPost("/book", async (BookingRequest request, TourPublisher publisher) =>
 {
+    // The two test actions deliberately skip validation — the point of them is
+    // to put something on the exchange that the rest of the system has to cope
+    // with. Everything else is validated here, at the edge.
+    if (request.Action is "invalid")
+    {
+        // Right key, wrong shape. It WILL be routed to both consumers, and both
+        // will reject it to the dead-letter exchange.
+        await publisher.PublishRawAsync("tour.booked", """{"nonsense":true,"note":"not a booking"}""");
+        return Results.Ok(new
+        {
+            exchange   = Topology.Exchange,
+            routingKey = "tour.booked",
+            message    = "Published an INVALID payload. Consumers will reject it to tours.dlx -> AdminApp."
+        });
+    }
+
+    if (request.Action is "unroutable")
+    {
+        // No binding matches "noroute.test". Without an alternate exchange this
+        // message would be silently dropped by the broker.
+        await publisher.PublishRawAsync("noroute.test", """{"note":"nobody is bound to this key"}""");
+        return Results.Ok(new
+        {
+            exchange   = Topology.Exchange,
+            routingKey = "noroute.test",
+            message    = "Published an UNROUTABLE message. tours.unroutable -> undeliverable -> AdminApp."
+        });
+    }
+
     if (string.IsNullOrWhiteSpace(request.Name))
         return Results.BadRequest(new { error = "Name is required." });
     if (string.IsNullOrWhiteSpace(request.Email))
@@ -40,15 +73,15 @@ app.MapPost("/book", async (BookingRequest request, TourPublisher publisher) =>
     };
 
     if (routingKey is null)
-        return Results.BadRequest(new { error = "Action must be 'book' or 'cancel'." });
+        return Results.BadRequest(new { error = "Unknown action." });
 
     await publisher.PublishAsync(routingKey, request);
 
     return Results.Ok(new
     {
-        exchange   = TourPublisher.ExchangeName,
+        exchange   = Topology.Exchange,
         routingKey,
-        message    = $"Published to '{TourPublisher.ExchangeName}' with routing key '{routingKey}'."
+        message    = $"Published to '{Topology.Exchange}' with routing key '{routingKey}' (persistent, confirmed by the broker)."
     });
 });
 
@@ -62,11 +95,23 @@ public record BookingRequest(string Name, string Email, string Tour, string Acti
 /// <summary>
 /// Owns a single long-lived connection + channel to RabbitMQ and publishes
 /// booking events to the topic exchange.
+///
+/// DAY 5 — "make sure that none of the messages to the BackOffice are lost"
+/// starts HERE, before the message ever reaches a queue:
+///
+///   * the channel is opened with PUBLISHER CONFIRMS, so BasicPublishAsync does
+///     not return until the broker has taken responsibility for the message. A
+///     broker that is down or out of disk now throws instead of quietly
+///     accepting a message into nothing.
+///   * DeliveryMode.Persistent writes the message to disk, so it survives a
+///     broker restart while it sits on the durable queue.
+///
+/// A durable queue holding non-persistent messages is still an empty queue
+/// after a restart — both halves are needed, which is why they are set here and
+/// in Topology together.
 /// </summary>
 public sealed class TourPublisher : IAsyncDisposable
 {
-    public const string ExchangeName = "tours.topic";
-
     private readonly string _hostName;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private IConnection? _connection;
@@ -75,11 +120,9 @@ public sealed class TourPublisher : IAsyncDisposable
     public TourPublisher(IConfiguration configuration)
         => _hostName = configuration["RabbitMq:HostName"] ?? "localhost";
 
-    public async Task PublishAsync(string routingKey, BookingRequest request)
+    public Task PublishAsync(string routingKey, BookingRequest request)
     {
-        var channel = await GetChannelAsync();
-
-        var body = JsonSerializer.SerializeToUtf8Bytes(new
+        var json = JsonSerializer.Serialize(new
         {
             request.Name,
             request.Email,
@@ -88,12 +131,31 @@ public sealed class TourPublisher : IAsyncDisposable
             TimestampUtc = DateTime.UtcNow
         });
 
-        await channel.BasicPublishAsync(
-            exchange:   ExchangeName,
-            routingKey: routingKey,
-            body:       body);
+        return PublishRawAsync(routingKey, json);
+    }
 
-        Console.WriteLine($" [x] Sent '{routingKey}' : {request.Name} / {request.Tour}");
+    public async Task PublishRawAsync(string routingKey, string json)
+    {
+        var channel = await GetChannelAsync();
+
+        var props = new BasicProperties
+        {
+            // On disk, not just in memory.
+            DeliveryMode = DeliveryModes.Persistent,
+            ContentType  = "application/json"
+        };
+
+        // With confirms enabled this await completes only when the broker has
+        // acked the message. If it nacks, this throws — and the HTTP caller
+        // finds out, instead of the message disappearing.
+        await channel.BasicPublishAsync(
+            exchange:   Topology.Exchange,
+            routingKey: routingKey,
+            mandatory:  false,          // the alternate exchange handles unroutable
+            basicProperties: props,
+            body:       System.Text.Encoding.UTF8.GetBytes(json));
+
+        Console.WriteLine($" [x] Sent '{routingKey}' (persistent, broker-confirmed)");
     }
 
     private async Task<IChannel> GetChannelAsync()
@@ -107,15 +169,15 @@ public sealed class TourPublisher : IAsyncDisposable
 
             var factory = new ConnectionFactory { HostName = _hostName };
             _connection = await factory.CreateConnectionAsync();
-            _channel    = await _connection.CreateChannelAsync();
 
-            // Declaring is idempotent. Publisher and both consumers declare the
-            // same exchange, so whichever process starts first creates it.
-            await _channel.ExchangeDeclareAsync(
-                exchange:   ExchangeName,
-                type:       ExchangeType.Topic,
-                durable:    false,
-                autoDelete: false);
+            _channel = await _connection.CreateChannelAsync(
+                new CreateChannelOptions(
+                    publisherConfirmationsEnabled:        true,
+                    publisherConfirmationTrackingEnabled: true));
+
+            // Declaring is idempotent. Publisher and all consumers declare the
+            // same topology, so whichever process starts first creates it.
+            await Topology.DeclareAsync(_channel);
 
             return _channel;
         }
